@@ -4,7 +4,6 @@ from datetime import datetime
 
 
 def insert_record(person, db_connection, db_cursor):
-    associates, relatives = get_associates_relatives(person)
     addresses = [get_address(address) for address in person['addresses']]
 
     query = "INSERT INTO `W_USPhoneBook`(" \
@@ -22,8 +21,9 @@ def insert_record(person, db_connection, db_cursor):
             "`PreviousAddresses`, " \
             "`Relatives`, " \
             "`Associates`, " \
+            "`PersonInfo`, " \
             "`Link`, " \
-            "`LastUpdate`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            "`LastUpdate`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
 
     val = (person['full_name'],
            person['first_name'],
@@ -37,7 +37,9 @@ def insert_record(person, db_connection, db_cursor):
            person['addresses'][0]['state'],
            person['addresses'][0]['zip'],
            json.dumps(addresses),
-           associates, relatives,
+           json.dumps([]),
+           json.dumps([]),
+           json.dumps(dict(person.get('person_info', {}))),
            person['link'],
            datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
     db_cursor.execute(query, val)
@@ -56,29 +58,6 @@ def get_phones_json(phones):
     ]
 
     return json.dumps(phones)
-
-
-def get_associates_relatives(person):
-    associates, relatives = [], []
-    for associate in person.get('associated_persons', []):
-        associate_type = associate['type']
-        associate_item = OrderedDict()
-        associate_item['link'] = associate.get('link', '')
-        associate_item['type'] = associate_type
-        associate_item['people_id'] = associate.get('people_id', '')
-        associate_item['full_name'] = associate['full_name']
-        associate_item['first_name'] = associate['first_name']
-        associate_item['middle_name'] = associate['middle_name']
-        associate_item['last_name'] = associate['last_name']
-        associate_item['suffix'] = associate.get('suffix', '')
-        associate_item['address'] = get_address(associate)
-
-        if associate_type == 'relatives':
-            relatives.append(associate_item)
-        else:
-            associates.append(associate_item)
-
-    return json.dumps(associates), json.dumps(relatives)
 
 
 def get_address(address_info):

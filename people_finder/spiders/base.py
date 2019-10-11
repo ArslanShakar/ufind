@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 
 import usaddress
 import mysql.connector
@@ -8,6 +9,7 @@ from scrapy import Request, signals, Spider
 class UFindBaseSpider(Spider):
     name = 'base'
     base_url = 'http://ufind.name/'
+    start_time = datetime.now()
 
     start_urls = [
         'http://ufind.name/',
@@ -18,7 +20,7 @@ class UFindBaseSpider(Spider):
     scraper_token = 'COX_'
 
     wait_period = 2
-    limit_count = 2
+    limit_count = 1
     read_records = 0
 
     db_columns = {
@@ -68,6 +70,7 @@ class UFindBaseSpider(Spider):
         try:
             self.sql_conn_cursor.execute('SELECT `Count` FROM `ScraperCount`')
             test = self.sql_conn_cursor.fetchall()
+
         except:
             self.sql_connection = mysql.connector.connect(
                 host="192.169.189.67",
@@ -86,6 +89,7 @@ class UFindBaseSpider(Spider):
     def spider_idle(self, spider):
         self.update_mysql_connection()
         self.update_database()
+        self.logger.info('Execution Time {}'.format(datetime.now() - self.start_time))
         self.logger.info("Making new request to server for another 64 batch")
         req = Request(self.base_url, self.parse, dont_filter=True, priority=-100,
                       errback=self.handle_error)
@@ -476,8 +480,8 @@ class UFindBaseSpider(Spider):
         address_keys = ['mailing_address', 'property_address']
         address_parts = []
 
-        for address_key in address_keys:
-            address = person.get(address_key, '').lower()
+        for a_key in address_keys:
+            address = person.get(a_key, '').lower()
             for value, key in usaddress.parse(address):
                 if key == 'AddressNumber' or key == 'StreetName':
                     value = value.replace(',', '') + ' '
