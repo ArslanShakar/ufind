@@ -7,7 +7,7 @@ from nameparser import HumanName
 from scrapy import Request
 from scrapy.selector import Selector
 
-from read_write_w_table import insert_record
+from write_w_table import insert_record
 from people_finder.spiders.base import UFindBaseSpider
 from people_finder.items import AddressItem, PersonItem, PersonInfo, PhoneItem
 
@@ -62,7 +62,7 @@ class UFindSpider(UFindBaseSpider):
             city = person.get('mailing_city', '')
             state = person.get('mailing_state', '')
 
-            if not any([first_name, last_name, city, state]):
+            if not all([first_name, last_name, city, state]):
                 continue
 
             url = self.person_url_t.format(fn=first_name.capitalize(),
@@ -215,11 +215,13 @@ class UFindSpider(UFindBaseSpider):
 
             is_home_verified = item['person_info']['home_owner_source'].strip().lower() \
                                in ['verified home owner', 'highly likely home owner']
+
             if is_home_verified:
                 self.get_addresses(raw[0], item, property_ms='Situs')
 
             phones = [p.strip() for p in re.findall(self.RE_PHONE, str(raw))
                       if p and len(p.strip()) > 11]
+
             self.get_phones(phones, item)
             self.get_emails(re.findall(self.RE_EMAIL, str(raw)), item)
 
@@ -260,13 +262,15 @@ class UFindSpider(UFindBaseSpider):
             person_item['addresses'] = []
             return
 
-        def add_address(address):
+        def parse_address(address):
             address1, city, state, zip = '', '', '', ''
             address = usaddress.parse(address)
 
             for value, key in address:
                 value = value.replace(',', '') + ' '
-                if key == 'PlaceName':
+                if key == 'OccupancyIdentifier':
+                    continue
+                elif key == 'PlaceName':
                     city += value
                 elif key == 'StateName':
                     state += value
@@ -283,16 +287,27 @@ class UFindSpider(UFindBaseSpider):
                 property_ms=property_ms,
             )
 
-            person_item.setdefault('addresses', []).append(self.clean_up(item))
+            self.clean_up(item)
+            if not item['address1'] or not all([item['city'], item['state']]):
+                return
+
+            key_t = '{}_{}_{}'
+            key = key_t.format(item['address1'], item['city'], item['state']).lower()
+
+            for e in person_item.get('addresses', ''):
+                if key in key_t.format(e['address1'], e['city'], e['state']).lower():
+                    return
+
+            person_item.setdefault('addresses', []).append(item)
 
         if isinstance(addresses, list):
-            add_address(addresses[0])
+            parse_address(addresses[0])
             property_ms = 'Situs'
 
             for a in addresses[1:]:
-                add_address(a)
+                parse_address(a)
         else:
-            add_address(addresses)
+            parse_address(addresses)
 
     def get_phones(self, phones, person_item):
         if not phones:
@@ -302,14 +317,15 @@ class UFindSpider(UFindBaseSpider):
         if not isinstance(phones, list):
             phones = [phones]
         self.clean_up(phones)
-        person_item['phones'] = [PhoneItem(number=phones.pop(0), rank=1)]
-        person_item['phones'] += [PhoneItem(number=p, rank=0) for i, p in enumerate(phones)
+        person_item['phones'] = [PhoneItem(number=phones.pop(0), rank=1, type='')]
+        person_item['phones'] += [PhoneItem(number=p, rank=0, type='') for i, p in enumerate(phones)
                                   if p != person_item['phones'][0]['number'] and p not in phones[i + 1:]]
 
     def get_emails(self, emails, person_item):
         if not isinstance(emails, list):
             emails = [emails]
-        person_item['emails'] = list(set(self.clean_up(emails)))
+        emails += person_item.get('emails', [])
+        person_item.setdefault('emails', []).extend(list(set(self.clean_up(emails))))
 
     def get_marketing_data(self, selector, item):
         raw_keys = selector.css('div:nth-child(2) span::text').extract()
@@ -326,7 +342,7 @@ class UFindSpider(UFindBaseSpider):
         item['person_info'] = person_info
 
     def clean_up(self, data):
-        if isinstance(data, (list, tuple)):
+        if isinstance(data, (list, tuple, set)):
             return [e.strip() for e in data if e and isinstance(e, (str, unicode)) and e.strip()]
 
         elif isinstance(data, (str, unicode)):
@@ -335,7 +351,12 @@ class UFindSpider(UFindBaseSpider):
         else:
             for key in data or {}:
                 if isinstance(data[key], (str, unicode)):
-                    data[key] = data[key].strip()
+                    if key in ['search_url', 'link']:
+                        continue
+                    elif key in ['state', 'mailing_state']:
+                        data[key] = data[key].strip().upper()
+                    else:
+                        data[key] = data[key].strip().title()
 
             return data
 
@@ -400,7 +421,7 @@ class UFindSpider(UFindBaseSpider):
 
             if data_key == 'phones':
                 current, previous, phones, inserted_phones = [], [], [], []
-                [current.append(e) if e['rank'] == 1 else previous.append(e) for e in data if e]
+                [current.append(e) if e['rank'] in [1, 3] else previous.append(e) for e in data if e]
 
                 if current:
                     temp = current.pop()
@@ -419,7 +440,7 @@ class UFindSpider(UFindBaseSpider):
                     if e and e not in data:
                         data.append(e)
 
-            target_record[data_key] = data
+            target_record[data_key] = [e for i, e in enumerate(data) if e and e not in data[i + 1:]]
 
         for key, record in records:
             if target_key == key:

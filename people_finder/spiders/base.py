@@ -57,7 +57,9 @@ class UFindBaseSpider(Spider):
 
         scraperCount = 0
 
-        qResult = self.sql_conn_cursor.fetchone()[0]
+        qResult = self.sql_conn_cursor.fetchall()
+        for r in qResult:
+            scraperCount = r[0]
 
         self.scraper_token = "{}{}".format(self.scraper_token, scraperCount)
         queryString = "UPDATE `ScraperCount` SET `Count` = `Count`+1 WHERE `Scraper`='" \
@@ -331,7 +333,7 @@ class UFindBaseSpider(Spider):
     def update_person(self, person):
         try:
             p_info = person.get('person_info', {})
-            query = "UPDATE `` SET `party`=%s, 'education'=%s, 'estimatedNetWorth'=%s," \
+            query = "UPDATE `T_People` SET `party`=%s, 'education'=%s, 'estimatedNetWorth'=%s," \
                     "'estimatedIncome'=%s, 'Ethnicity'=%s WHERE `PeopleID`=%s"
             val = (person.get('party', ''), p_info.get('education'), p_info.get('net_worth'),
                    p_info.get('income_household'), p_info.get('ethnic_group'), int(person['id']))
