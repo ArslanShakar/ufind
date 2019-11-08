@@ -71,7 +71,6 @@ class UFindSpider(UFindBaseSpider):
             person['id'] = person_id
             person['search_url'] = url
             person['link'] = url
-
             meta = {
                 'item': PersonItem(person),
                 'dont_merge_cookies': True,

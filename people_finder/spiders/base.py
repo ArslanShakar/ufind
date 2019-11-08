@@ -488,7 +488,7 @@ class UFindBaseSpider(Spider):
                 if key == 'AddressNumber' or key == 'StreetName':
                     value = value.replace(',', '') + ' '
                     if value and value.strip():
-                        address_parts.append(value)
+                        address_parts.append(value.strip())
 
         address_parts = set(address_parts)
         return address_parts
